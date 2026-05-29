@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
-# exit on error
 set -o errexit
 
-# Apply database migrations
-npx prisma migrate deploy
-
-# Seed the database (idempotent seed)
+npx prisma db push --accept-data-loss --force-reset
 npm run db:seed
-
-# Start the server
 npm start
