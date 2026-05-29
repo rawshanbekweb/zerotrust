@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────
+   CSS CUSTOM PROPERTIES — Design Tokens
+   ───────────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    /* Light mode (not primary, but supported) */
+    --background:     0 0% 100%;
+    --foreground:     222 84% 5%;
+    --surface:        210 40% 98%;
+    --border:         214 32% 91%;
+    --input:          214 32% 91%;
+    --ring:           221 83% 53%;
+    --radius:         0.75rem;
+
+    --brand-primary:  221 83% 53%;
+    --brand-accent:   188 94% 43%;
+  }
+
+  .dark {
+    --background:     224 71% 4%;
+    --foreground:     213 31% 91%;
+    --surface:        223 47% 11%;
+    --border:         216 34% 17%;
+    --input:          216 34% 17%;
+    --ring:           221 83% 53%;
+
+    --brand-primary:  221 83% 53%;
+    --brand-accent:   188 94% 43%;
+  }
+
+  * {
+    @apply border-slate-800;
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-surface-base text-slate-100;
+    font-feature-settings: 'cv11', 'ss01';
+    font-variation-settings: 'opsz' 32;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-surface-elevated;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-700 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-600;
+  }
+
+  /* Text selection */
+  ::selection {
+    @apply bg-brand-500/30 text-brand-200;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   GLASSMORPHISM COMPONENT CLASSES
+   ───────────────────────────────────────────────────────────── */
+@layer components {
+  .glass-card {
+    @apply bg-surface-elevated/80 backdrop-blur-md border border-slate-700/50 rounded-2xl;
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300
+           hover:border-brand-500/30 hover:shadow-card-hover;
+  }
+
+  .glass-panel {
+    @apply bg-slate-900/60 backdrop-blur-xl border border-slate-700/40 rounded-2xl;
+  }
+
+  /* Cyber grid background pattern */
+  .cyber-grid {
+    background-image:
+      linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* Glowing border effect */
+  .glow-border-brand {
+    @apply border border-brand-500/40;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1),
+                inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .glow-border-cyber {
+    @apply border border-cyber-500/40;
+    box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.1),
+                inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .glow-border-danger {
+    @apply border border-red-500/40;
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.1),
+                inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  }
+
+  /* Status dot indicator */
+  .status-dot {
+    @apply inline-block w-2 h-2 rounded-full;
+  }
+  .status-dot.online   { @apply bg-status-online shadow-glow-success; }
+  .status-dot.offline  { @apply bg-status-offline; }
+  .status-dot.blocked  { @apply bg-status-blocked shadow-glow-danger; }
+  .status-dot.idle     { @apply bg-status-idle shadow-glow-warning; }
+
+  /* Severity badge variants */
+  .severity-badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium font-mono;
+  }
+  .severity-badge.low      { @apply bg-green-500/15 text-green-400 border border-green-500/25; }
+  .severity-badge.medium   { @apply bg-amber-500/15 text-amber-400 border border-amber-500/25; }
+  .severity-badge.high     { @apply bg-red-500/15 text-red-400 border border-red-500/25; }
+  .severity-badge.critical { @apply bg-purple-500/15 text-purple-400 border border-purple-500/25; }
+  .severity-badge.info     { @apply bg-blue-500/15 text-blue-400 border border-blue-500/25; }
+
+  /* Skeleton loader */
+  .skeleton {
+    @apply bg-slate-800 rounded animate-pulse;
+    background: linear-gradient(
+      90deg,
+      rgba(30, 41, 59, 0.8) 0%,
+      rgba(51, 65, 85, 0.8) 50%,
+      rgba(30, 41, 59, 0.8) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  /* Metric number — large bold counters */
+  .metric-value {
+    @apply text-3xl font-bold tracking-tight font-display;
+  }
+
+  /* Monospace for IPs, hashes, tokens */
+  .mono {
+    @apply font-mono text-sm;
+  }
+
+  /* Interactive table rows */
+  .table-row-interactive {
+    @apply transition-colors duration-150
+           hover:bg-brand-500/5 cursor-pointer;
+  }
+
+  /* Scan line animation overlay (for terminal effects) */
+  .scan-effect::before {
+    content: '';
+    @apply absolute inset-0 pointer-events-none;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(59, 130, 246, 0.03) 50%,
+      transparent 100%
+    );
+    animation: scan-line 4s linear infinite;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   UTILITY OVERRIDES
+   ───────────────────────────────────────────────────────────── */
+@layer utilities {
+  .text-gradient-brand {
+    @apply bg-gradient-to-r from-brand-400 to-cyber-400 bg-clip-text text-transparent;
+  }
+
+  .text-gradient-danger {
+    @apply bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent;
+  }
+
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}

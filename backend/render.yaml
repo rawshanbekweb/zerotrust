@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: zerotrust-backend
+    env: node
+    plan: free
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: chmod +x ./start-render.sh && ./start-render.sh
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: DATABASE_URL
+        value: file:./prisma/dev.db
+      - key: ALLOWED_ORIGINS
+        sync: false
+        description: "Comma-separated list of allowed frontend origins (e.g., https://your-app.vercel.app)"
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: RATE_LIMIT_MAX
+        value: "200"

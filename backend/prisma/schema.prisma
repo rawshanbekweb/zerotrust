@@ -1,0 +1,424 @@
+// ─────────────────────────────────────────────────────────────
+// Zero Trust Security Platform — Prisma Schema
+//
+// Default: SQLite for local MVP development
+// To switch to PostgreSQL: change provider to "postgresql"
+// and update DATABASE_URL in .env
+// ─────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// IDENTITY & ACCESS
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  username        String    @unique
+  passwordHash    String
+  firstName       String
+  lastName        String
+  avatar          String?
+  department      String?
+  jobTitle        String?
+  phoneNumber     String?
+
+  isActive        Boolean   @default(true)
+  isEmailVerified Boolean   @default(false)
+  isMfaEnabled    Boolean   @default(false)
+  mfaSecret       String?
+
+  // Zero Trust risk profile
+  riskScore       Int       @default(0)
+  riskLevel       String    @default("LOW")   // LOW | MEDIUM | HIGH | CRITICAL
+  trustScore      Int       @default(100)
+
+  lastLoginAt     DateTime?
+  lastLoginIp     String?
+  lastLoginCity   String?
+  lastLoginCountry String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  roleId          String
+  role            Role      @relation(fields: [roleId], references: [id])
+
+  sessions        Session[]
+  devices         Device[]
+  auditLogs       AuditLog[]
+  loginAttempts   LoginAttempt[]
+  notifications   Notification[]
+  activityLogs    ActivityLog[]
+  riskHistory     RiskScoreHistory[]
+  assignedIncidents Incident[] @relation("AssignedIncidents")
+  createdIncidents  Incident[] @relation("CreatedIncidents")
+
+  @@index([email])
+  @@index([riskScore])
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique    // SUPER_ADMIN | ADMIN | ANALYST | VIEWER
+  displayName String
+  description String?
+  color       String   @default("#6366f1")
+  isSystem    Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  action      String   // create | read | update | delete | manage
+  resource    String   // users | devices | incidents | policies | analytics | audit | settings
+  description String?
+
+  roles       RolePermission[]
+
+  @@unique([action, resource])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  grantedAt    DateTime   @default(now())
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// SESSION & DEVICE TRUST
+// ─────────────────────────────────────────────────────────────
+
+model Session {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  refreshToken  String    @unique
+  deviceId      String?
+  device        Device?   @relation(fields: [deviceId], references: [id])
+
+  ipAddress     String
+  userAgent     String
+  city          String?
+  country       String?
+  latitude      Float?
+  longitude     Float?
+
+  isActive      Boolean   @default(true)
+  revokedReason String?
+
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  lastActivityAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([refreshToken])
+}
+
+model Device {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name          String
+  type          String      @default("UNKNOWN") // DESKTOP | MOBILE | TABLET | SERVER | UNKNOWN
+  os            String?
+  osVersion     String?
+  browser       String?
+  browserVersion String?
+  fingerprint   String      @unique
+
+  ipAddress     String
+  city          String?
+  country       String?
+
+  trustScore    Int         @default(50)        // 0–100
+  isTrusted     Boolean     @default(false)
+  isBlocked     Boolean     @default(false)
+  blockReason   String?
+
+  lastSeenAt    DateTime    @default(now())
+  firstSeenAt   DateTime    @default(now())
+
+  sessions      Session[]
+
+  @@index([userId])
+  @@index([fingerprint])
+  @@index([trustScore])
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUTHENTICATION EVENTS
+// ─────────────────────────────────────────────────────────────
+
+model LoginAttempt {
+  id          String    @id @default(cuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id])
+
+  email       String
+  ipAddress   String
+  userAgent   String
+  success     Boolean
+  failReason  String?   // INVALID_PASSWORD | ACCOUNT_LOCKED | MFA_FAILED | SUSPICIOUS_LOCATION
+
+  city        String?
+  country     String?
+  latitude    Float?
+  longitude   Float?
+
+  // Anomaly flags
+  isImpossibleTravel Boolean @default(false)
+  isSuspiciousIp     Boolean @default(false)
+  isBruteForce       Boolean @default(false)
+
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([ipAddress])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUDIT LOGS (immutable — no updates/deletes in application)
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id])
+
+  action      String    // USER_LOGIN | POLICY_UPDATED | DEVICE_BLOCKED | etc.
+  resource    String    // users | devices | policies | settings
+  resourceId  String?
+  oldValue    String?   // JSON string of previous state
+  newValue    String?   // JSON string of new state
+  description String
+
+  ipAddress   String
+  userAgent   String?
+  severity    String    @default("INFO")  // INFO | WARNING | ERROR | CRITICAL
+
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([severity])
+  @@index([createdAt])
+}
+
+model ActivityLog {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+
+  action      String
+  details     String?
+  ipAddress   String?
+  metadata    String?   // JSON string
+
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// INCIDENTS & ALERTS
+// ─────────────────────────────────────────────────────────────
+
+model Incident {
+  id              String    @id @default(cuid())
+  title           String
+  description     String
+  type            String    // BRUTE_FORCE | IMPOSSIBLE_TRAVEL | SUSPICIOUS_DEVICE | DATA_EXFILTRATION | etc.
+  severity        String    @default("MEDIUM")  // LOW | MEDIUM | HIGH | CRITICAL
+  status          String    @default("OPEN")    // OPEN | INVESTIGATING | CONTAINED | RESOLVED | CLOSED
+
+  affectedUserId    String?
+  affectedDeviceId  String?
+
+  assignedToId    String?
+  assignedTo      User?     @relation("AssignedIncidents", fields: [assignedToId], references: [id])
+
+  createdById     String?
+  createdBy       User?     @relation("CreatedIncidents", fields: [createdById], references: [id])
+
+  detectedAt      DateTime  @default(now())
+  resolvedAt      DateTime?
+
+  // Attack simulation metadata
+  isSimulated     Boolean   @default(false)
+  sourceIp        String?
+  attackVector    String?
+  mitreTactic     String?   // MITRE ATT&CK tactic
+  mitreTechnique  String?   // MITRE ATT&CK technique
+
+  metadata        String?   // JSON string
+
+  updates         IncidentUpdate[]
+  alerts          Alert[]
+
+  @@index([severity])
+  @@index([status])
+  @@index([createdAt])
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model IncidentUpdate {
+  id          String    @id @default(cuid())
+  incidentId  String
+  incident    Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  authorId    String?
+  message     String
+  type        String    @default("COMMENT")  // COMMENT | STATUS_CHANGE | ESCALATION | RESOLUTION
+
+  createdAt   DateTime  @default(now())
+
+  @@index([incidentId])
+}
+
+model Alert {
+  id          String    @id @default(cuid())
+  incidentId  String?
+  incident    Incident? @relation(fields: [incidentId], references: [id])
+
+  type        String    // BRUTE_FORCE | IMPOSSIBLE_TRAVEL | NEW_DEVICE | HIGH_RISK_USER | etc.
+  severity    String    @default("MEDIUM")  // INFO | LOW | MEDIUM | HIGH | CRITICAL
+  title       String
+  description String
+
+  userId      String?
+  deviceId    String?
+  sourceIp    String?
+
+  isRead      Boolean   @default(false)
+  isResolved  Boolean   @default(false)
+
+  metadata    String?   // JSON string
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  @@index([severity])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// SECURITY POLICIES
+// ─────────────────────────────────────────────────────────────
+
+model SecurityPolicy {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  displayName String
+  description String?
+  type        String    // ACCESS | DEVICE | NETWORK | MFA | SESSION | DATA
+  category    String    // ZERO_TRUST | COMPLIANCE | CUSTOM
+
+  rules       String    // JSON array of policy rules
+  conditions  String    // JSON array of conditions
+  actions     String    // JSON array of actions on match (ALLOW | DENY | MFA_CHALLENGE | NOTIFY)
+
+  isActive    Boolean   @default(true)
+  priority    Int       @default(50)  // 1–100, higher = evaluated first
+  isSystem    Boolean   @default(false)
+
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([isActive])
+  @@index([priority])
+}
+
+// ─────────────────────────────────────────────────────────────
+// RISK SCORING ENGINE
+// ─────────────────────────────────────────────────────────────
+
+model RiskProfile {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+
+  currentScore    Int       @default(0)    // 0–100
+  level           String    @default("LOW") // LOW | MEDIUM | HIGH | CRITICAL
+  factors         String    // JSON: active risk factors contributing to score
+
+  lastEvaluatedAt DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  history         RiskScoreHistory[]
+
+  @@index([currentScore])
+}
+
+model RiskScoreHistory {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+
+  profileId   String?
+  profile     RiskProfile? @relation(fields: [profileId], references: [id])
+
+  score       Int
+  level       String
+  delta       Int         // change from previous (+/-)
+  reason      String      // which factor triggered the change
+  metadata    String?     // JSON
+
+  createdAt   DateTime    @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  message     String
+  type        String    // ALERT | INCIDENT | SYSTEM | POLICY | RISK_CHANGE
+  severity    String    @default("INFO")
+  isRead      Boolean   @default(false)
+
+  actionUrl   String?   // link to relevant page
+  metadata    String?   // JSON
+
+  createdAt   DateTime  @default(now())
+  readAt      DateTime?
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
